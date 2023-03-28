@@ -1,0 +1,46 @@
+{
+    "name": "efabrica/version-history",
+    "type": "library",
+    "description": "PHP package template",
+    "keywords": [
+        "php",
+        "package",
+        "template"
+    ],
+    "readme": "README.md",
+    "license": "proprietary",
+    "authors": [
+        {
+            "name": "Martin Petricko",
+            "email": "matopetricko@gmail.com",
+        },
+        {
+            "name": "Michal Lulco",
+            "email": "michal.lulco@gmail.com"
+        }
+    ],
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://gitlab.com/api/v4/group/64178316/-/packages/composer/packages.json"
+        }
+    ],
+    "require": {
+        "php": "^7.4|^8.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Efabrica\\VersionHistory\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
