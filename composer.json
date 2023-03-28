@@ -12,7 +12,7 @@
     "authors": [
         {
             "name": "Martin Petricko",
-            "email": "matopetricko@gmail.com",
+            "email": "matopetricko@gmail.com"
         },
         {
             "name": "Michal Lulco",
@@ -22,14 +22,18 @@
     "repositories": [
         {
             "type": "composer",
-            "url": "https://gitlab.com/api/v4/group/64178316/-/packages/composer/packages.json"
+            "url": "https://composer.efabrica.sk"
         }
     ],
     "require": {
-        "php": "^7.4|^8.0"
+        "php": "^7.4|^8.0",
+        "ext-json": "*",
+        "efabrica/nette-database-repository": "dev-repositories",
+        "efabrica/nette-di-request-id-extension": "^1.0",
+        "nette/security": "^3.1"
     },
     "require-dev": {
-        "phpunit/phpunit": "^10.0"
+        "phpunit/phpunit": "^9.6"
     },
     "autoload": {
         "psr-4": {

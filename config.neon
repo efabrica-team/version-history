@@ -1,0 +1,22 @@
+services:
+    repositoryManager:
+        setup:
+            - addRepository('versions', @versionRepository)
+
+    modelFactoryManager:
+        setup:
+            - addFactory('versions', @versionModelFactory)
+
+    # Repositories
+    versionRepository:
+        create: Efabrica\VersionHistory\Repositories\VersionRepository
+        arguments:
+            selectionFactory: @versionSelectionFactory
+
+    # Selections
+    versionSelectionFactory:
+        implement: Efabrica\VersionHistory\Repositories\Selections\Factories\VersionSelectionFactory
+
+    # Models
+    versionModelFactory:
+        implement: Efabrica\VersionHistory\Repositories\Models\Factories\VersionModelFactory
