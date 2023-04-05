@@ -5,153 +5,171 @@ namespace Efabrica\VersionHistory\Behaviors;
 use DateInterval;
 use DateTimeInterface;
 use Efabrica\Nette\DI\Extension\RequestId\Provider;
-use Efabrica\NetteDatabaseRepository\Behaviors\RepositoryBehavior;
+use Efabrica\NetteDatabaseRepository\Behavior\Behavior;
+use Efabrica\NetteDatabaseRepository\Behavior\BehaviorWithSoftDelete;
 use Efabrica\NetteDatabaseRepository\Models\ActiveRow;
+use Efabrica\NetteDatabaseRepository\Repositores\Repository;
 use Efabrica\VersionHistory\Enums\VersionFlag;
 use Efabrica\VersionHistory\Repositories\Models\Version;
+use Efabrica\VersionHistory\Repositories\VersionableRepository;
 use Efabrica\VersionHistory\Repositories\VersionRepository;
 use Nette\Security\User;
 use Nette\Utils\DateTime;
 
-trait VersionBehavior
+class VersionBehavior extends Behavior implements BehaviorWithSoftDelete
 {
-    use RepositoryBehavior;
+    /** @inject */
+    public Provider $provider;
 
-    protected function getVersionColumnsToIgnore(): array
+    /** @inject */
+    public User $user;
+
+    /** @inject */
+    public VersionRepository $versionRepository;
+    private array $versionColumnsToIgnore = [];
+    private array $versionColumnsToForce = [];
+
+    /**
+     * @var VersionableRepository&Repository
+     */
+    private Repository $repository;
+
+    /**
+     * @param VersionableRepository&Repository $repository
+     */
+    public function __construct(VersionableRepository $repository)
     {
-        return [];
+        $this->repository = $repository;
     }
 
-    protected function getVersionColumnsToForce(): array
+    public function afterInsert(ActiveRow $row, iterable $data): void
     {
-        return [];
-    }
-
-    protected function getRelatedTables(ActiveRow $record): array
-    {
-        return [];
-    }
-
-    final public function afterInsertLogChanges(ActiveRow $record, array $data, VersionRepository $versionRepository, User $user, Provider $provider): void
-    {
-        foreach ($this->getVersionColumnsToIgnore() as $ignored) {
+        foreach ($this->versionColumnsToIgnore as $ignored) {
             if (isset($data[$ignored])) {
                 unset($data[$ignored]);
             }
         }
 
-        $recordToLink = $this->processLinkedEntries($record, $versionRepository, $user, $provider);
+        $rowToLink = $this->processLinkedEntries($row);
 
-        $versionRepository->insert([
+        $this->versionRepository->insert([
             'created_at' => new DateTime('now'),
-            'foreign_id' => $record->getPrimary(),
-            'foreign_table' => $this->getTableName(),
-            'user_id' => $user->getId(),
+            'foreign_id' => $row->getPrimary(),
+            'foreign_table' => $this->repository->getTableName(),
+            'user_id' => $this->user->getId(),
             'old_data' => json_encode([]),
             'new_data' => json_encode($data),
             'flag' => VersionFlag::CREATE,
-            'transaction_id' => $provider->getRequestId(),
-            'linked_id' => $recordToLink !== null ? $recordToLink->id : null,
+            'transaction_id' => $this->provider->getRequestId(),
+            'linked_id' => $rowToLink !== null ? $rowToLink->id : null,
         ]);
     }
 
-    final public function afterUpdateLogChanges(ActiveRow $oldRecord, ActiveRow $newRecord, array $data, VersionRepository $versionRepository, User $user, Provider $provider): void
+    final public function afterUpdate(ActiveRow $oldRecord, ActiveRow $newRecord, iterable $data): void
     {
         $diff = $this->makeDiff($oldRecord, $data);
 
-        foreach ($this->getVersionColumnsToForce() as $column) {
+        foreach ($this->versionColumnsToForce as $column) {
             if (!isset($diff['old'][$column]) && !isset($diff['new'][$column])) {
                 $diff['old'][$column] = $oldRecord->$column;
                 $diff['new'][$column] = $newRecord->$column;
             }
         }
 
-        $recordToLink = $this->processLinkedEntries($newRecord, $versionRepository, $user, $provider);
+        $rowToLink = $this->processLinkedEntries($newRecord);
 
-        $versionRepository->insert([
+        $this->versionRepository->insert([
             'created_at' => new DateTime('now'),
             'foreign_id' => $newRecord->getPrimary(),
-            'foreign_table' => $this->getTableName(),
-            'user_id' => $user->getId(),
+            'foreign_table' => $this->repository->getTableName(),
+            'user_id' => $this->user->getId(),
             'old_data' => json_encode($diff['old']),
             'new_data' => json_encode($diff['new']),
             'flag' => VersionFlag::UPDATE,
-            'transaction_id' => $provider->getRequestId(),
-            'linked_id' => $recordToLink !== null ? $recordToLink->id : null,
+            'transaction_id' => $this->provider->getRequestId(),
+            'linked_id' => $rowToLink !== null ? $rowToLink->id : null,
         ]);
     }
 
-    final public function afterSoftDeleteVersionTrait(ActiveRow $record, VersionRepository $versionRepository, User $user, Provider $provider): void
+    public function beforeSoftDelete(ActiveRow $row): void
     {
-        $recordToLink = $this->processLinkedEntries($record, $versionRepository, $user, $provider);
+    }
 
-        $versionRepository->insert([
+    final public function afterSoftDelete(ActiveRow $row): void
+    {
+        $rowToLink = $this->processLinkedEntries($row);
+
+        $this->versionRepository->insert([
             'created_at' => new DateTime('now'),
-            'foreign_id' => $record->getPrimary(),
-            'foreign_table' => $this->getTableName(),
-            'user_id' => $user->getId(),
+            'foreign_id' => $row->getPrimary(),
+            'foreign_table' => $this->repository->getTableName(),
+            'user_id' => $this->user->getId(),
             'old_data' => json_encode([]),
             'new_data' => json_encode([]),
             'flag' => VersionFlag::SOFT_DELETE,
-            'transaction_id' => $provider->getRequestId(),
-            'linked_id' => $recordToLink !== null ? $recordToLink->id : null,
+            'transaction_id' => $this->provider->getRequestId(),
+            'linked_id' => $rowToLink !== null ? $rowToLink->id : null,
         ]);
     }
 
-    final public function afterRestoreDeleteVersionTrait(ActiveRow $record, VersionRepository $versionRepository, User $user, Provider $provider): void
+    public function beforeRestore(ActiveRow $row): void
     {
-        $recordToLink = $this->processLinkedEntries($record, $versionRepository, $user, $provider);
+    }
 
-        $versionRepository->insert([
+    final public function afterRestore(ActiveRow $row): void
+    {
+        $rowToLink = $this->processLinkedEntries($row);
+
+        $this->versionRepository->insert([
             'created_at' => new DateTime('now'),
-            'foreign_id' => $record->getPrimary(),
-            'foreign_table' => $this->getTableName(),
-            'user_id' => $user->getId(),
+            'foreign_id' => $row->getPrimary(),
+            'foreign_table' => $this->repository->getTableName(),
+            'user_id' => $this->user->getId(),
             'old_data' => json_encode([]),
             'new_data' => json_encode([]),
             'flag' => VersionFlag::RESTORE,
-            'transaction_id' => $provider->getRequestId(),
-            'linked_id' => $recordToLink !== null ? $recordToLink->id : null,
+            'transaction_id' => $this->provider->getRequestId(),
+            'linked_id' => $rowToLink !== null ? $rowToLink->id : null,
         ]);
     }
 
-    final public function afterDeleteVersionTrait(ActiveRow $record, VersionRepository $versionRepository, User $user, Provider $provider): void
+    final public function afterDelete(ActiveRow $row): void
     {
-        $recordToLink = $this->processLinkedEntries($record, $versionRepository, $user, $provider);
+        $rowToLink = $this->processLinkedEntries($row);
 
-        $versionRepository->insert([
+        $this->versionRepository->insert([
             'created_at' => new DateTime('now'),
-            'foreign_id' => $record->getPrimary(),
-            'foreign_table' => $this->getTableName(),
-            'user_id' => $user->getId(),
-            'old_data' => json_encode($record->getData()),
-            'new_data' => json_encode(array_fill_keys(array_keys($record->getData()), '')),
+            'foreign_id' => $row->getPrimary(),
+            'foreign_table' => $this->repository->getTableName(),
+            'user_id' => $this->user->getId(),
+            'old_data' => json_encode($row->getData()),
+            'new_data' => json_encode(array_fill_keys(array_keys($row->getData()), '')),
             'flag' => VersionFlag::DELETE,
-            'transaction_id' => $provider->getRequestId(),
-            'linked_id' => $recordToLink !== null ? $recordToLink->id : null,
+            'transaction_id' => $this->provider->getRequestId(),
+            'linked_id' => $rowToLink !== null ? $rowToLink->id : null,
         ]);
     }
 
-    private function processLinkedEntries(ActiveRow $record, VersionRepository $versionRepository, User $user, Provider $provider): ?Version
+    private function processLinkedEntries(ActiveRow $row): ?Version
     {
-        if ($provider->getRequestId() === null) {
+        if ($this->provider->getRequestId() === null) {
             return null;
         }
 
-        $recordToLink = null;
+        $rowToLink = null;
 
-        $relatedTables = $this->getRelatedTables($record);
+        $relatedTables = $this->repository->getRelatedTables($row);
         foreach ($relatedTables as $table => $foreignId) {
-            $recordToLink = $this->processLinkedEntry($versionRepository, $user, $provider, $foreignId, $table, $recordToLink);
+            $rowToLink = $this->processLinkedEntry($foreignId, $table, $rowToLink);
         }
 
-        return $recordToLink;
+        return $rowToLink;
     }
 
-    private function processLinkedEntry(VersionRepository $versionRepository, User $user, Provider $provider, $foreignId, string $table, ?Version $recordToLink = null): Version
+    private function processLinkedEntry($foreignId, string $table, ?Version $rowToLink = null): Version
     {
-        $existing = $versionRepository->query()->where([
-            'transaction_id' => $provider->getRequestId(),
+        $existing = $this->versionRepository->getSelection()->where([
+            'transaction_id' => $this->provider->getRequestId(),
             'foreign_id' => $foreignId,
             'foreign_table' => $table,
         ])->limit(1)->fetch();
@@ -160,20 +178,20 @@ trait VersionBehavior
             return $existing;
         }
 
-        return $versionRepository->insert([
+        return $this->versionRepository->insert([
             'created_at' => new DateTime('now'),
             'foreign_id' => $foreignId,
             'foreign_table' => $table,
-            'user_id' => $user->getId(),
+            'user_id' => $this->user->getId(),
             'old_data' => json_encode([]),
             'new_data' => json_encode([]),
             'flag' => VersionFlag::UPDATE,
-            'transaction_id' => $provider->getRequestId(),
-            'linked_id' => $recordToLink !== null ? $recordToLink->id : null,
+            'transaction_id' => $this->provider->getRequestId(),
+            'linked_id' => $rowToLink !== null ? $rowToLink->id : null,
         ]);
     }
 
-    private function makeDiff(ActiveRow $record, array $data): array
+    private function makeDiff(ActiveRow $row, iterable $data): array
     {
         $result = [
             'old' => [],
@@ -186,7 +204,7 @@ trait VersionBehavior
                 $value = (string)$value;
             }
 
-            if (!isset($record->$column)) {
+            if (!isset($row->$column)) {
                 foreach ($operationMarks as $operationMark) {
                     if (strpos($column, $operationMark)) {
                         $column = rtrim($column, $operationMark);
@@ -195,10 +213,9 @@ trait VersionBehavior
                 }
             }
 
-            if ($record->$column !== $value) {
-                $columnsToIgnore = $this->getVersionColumnsToIgnore();
-                if (!in_array($column, $columnsToIgnore, true)) {
-                    $result['old'][$column] = $record->$column === null ? null : $this->convertToString($record->$column);
+            if ($row->$column !== $value) {
+                if (!in_array($column, $this->versionColumnsToIgnore, true)) {
+                    $result['old'][$column] = $row->$column === null ? null : $this->convertToString($row->$column);
                     $result['new'][$column] = $value === null ? null : $this->convertToString($value);
                 }
             }

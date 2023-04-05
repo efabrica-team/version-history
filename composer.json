@@ -21,6 +21,10 @@
     ],
     "repositories": [
         {
+            "type": "vcs",
+            "url": "../ndr-new"
+        },
+        {
             "type": "composer",
             "url": "https://composer.efabrica.sk"
         }
@@ -28,7 +32,7 @@
     "require": {
         "php": "^7.4|^8.0",
         "ext-json": "*",
-        "efabrica/nette-database-repository": "dev-repositories",
+        "efabrica/nette-database-repository": "dev-class-behavior",
         "efabrica/nette-di-request-id-extension": "^1.0",
         "nette/security": "^3.1"
     },
